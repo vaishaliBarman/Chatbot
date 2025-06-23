@@ -1,98 +1,108 @@
-let responses = {};
 
-// Load responses from Moodle.json
-fetch('Moodle.json')
-  .then(response => response.json())
-  .then(data => {
-    responses = data;
-    console.log("Responses loaded:", responses);
-  })
-  .catch(error => {
-    console.error("Error loading Moodle.json:", error);
-    appendMessage("Answer: डेटा लोड करने में समस्या आ गई।", 'bot');
-  });
+const userInput = document.getElementById("user-input");
+const chatBox = document.getElementById("chat-box");
+const sendBtn = document.getElementById("send-btn");
+const micBtn = document.getElementById("mic-btn");
+const toggleTheme = document.getElementById("toggle-theme");
 
-const chatbox = document.getElementById('chatbox');
-const userInput = document.getElementById('userInput');
-
-// Append message to chat
-function appendMessage(text, sender) {
-  const msgWrapper = document.createElement('div');
-  msgWrapper.className = 'message-wrapper ' + sender;
-
-  const avatar = document.createElement('div');
-  avatar.className = 'avatar';
-  avatar.innerHTML = sender === 'user' ? '🧑' : '🤖';
-
-  const msg = document.createElement('div');
-  msg.className = 'message';
-  msg.textContent = text;
-
-  msgWrapper.appendChild(avatar);
-  msgWrapper.appendChild(msg);
-
-  chatbox.appendChild(msgWrapper);
-  msgWrapper.classList.add('slide-in');
-  chatbox.scrollTop = chatbox.scrollHeight;
-}
-
-// Calculate similarity between two strings (0 to 1)
-function getSimilarity(a, b) {
-  a = a.toLowerCase();
-  b = b.toLowerCase();
+// --- Helper: Similarity Function (Basic Fuzzy Matching) ---
+function getSimilarity(str1, str2) {
+  str1 = str1.toLowerCase().trim();
+  str2 = str2.toLowerCase().trim();
+  
   let matches = 0;
-  let len = Math.max(a.length, b.length);
+  const minLen = Math.min(str1.length, str2.length);
 
-  for (let i = 0; i < Math.min(a.length, b.length); i++) {
-    if (a[i] === b[i]) matches++;
+  for (let i = 0; i < minLen; i++) {
+    if (str1[i] === str2[i]) matches++;
   }
 
-  return matches / len;
+  return matches / Math.max(str1.length, str2.length);
 }
 
-// Process user input and respond
-function sendMessage() {
-  let input = userInput.value.trim().toLowerCase();
+// --- Get chatbot response with fuzzy matching ---
+async function getBotResponse(input) {
+  const res = await fetch("Moodle.json");
+  const data = await res.json();
+
+  // Exact match check
+  if (data[input.trim()]) {
+    return data[input.trim()];
+  }
+
+  // Fuzzy match check
+  let bestMatch = "";
+  let highestScore = 0;
+
+  for (let key in data) {
+    const score = getSimilarity(input, key);
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = key;
+    }
+  }
+
+  // Threshold of 0.3 = 30% match
+  if (highestScore >= 0.3) {
+    return data[bestMatch];
+  }
+
+  return "माफ़ कीजिए, मैं वह नहीं समझ पाया।";
+}
+
+// --- Append message to chat window ---
+function appendMessage(content, sender) {
+  const msg = document.createElement("div");
+  msg.className = `message ${sender}`;
+  msg.textContent = content;
+  chatBox.appendChild(msg);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// --- Send button click handler ---
+sendBtn.addEventListener("click", async () => {
+  const input = userInput.value.trim();
   if (!input) return;
+  appendMessage(input, "user");
+  userInput.value = "";
+  const botReply = await getBotResponse(input);
+  setTimeout(() => appendMessage(botReply, "bot"), 500);
+});
 
-  appendMessage("आप: " + userInput.value, 'user');
+// --- Speech recognition (Hindi) ---
+micBtn.addEventListener("click", () => {
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = "hi-IN";
+  recognition.start();
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    userInput.value = transcript;
+  };
+});
 
-  let found = false;
+// --- Theme Toggle Button ---
+toggleTheme.addEventListener("click", () => {
+  document.body.classList.toggle("dark");
+});
 
-  // Exact match
-  if (input in responses) {
-    appendMessage("Answer: " + responses[input], 'bot');
-    found = true;
-  } else {
-    // Fuzzy matching
-    let bestMatch = '';
-    let highestScore = 0;
+// --- Emoji Bubbles Background ---
+const bubbleContainer = document.getElementById("bubble-background");
+const emojis = ["💬", "🤖", "🧠", "💡", "✨", "👋", "+", "*"];
 
-    for (let key in responses) {
-      let score = getSimilarity(input, key.toLowerCase());
-      if (score > highestScore) {
-        highestScore = score;
-        bestMatch = key;
-      }
-    }
+function createBubble() {
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = emojis[Math.floor(Math.random() * emojis.length)];
 
-    if (highestScore >= 0.45) {
-      appendMessage("Answer: " + responses[bestMatch], 'bot');
-      found = true;
-    }
-  }
+  const size = Math.random() * 1.5 + 1;
+  bubble.style.fontSize = `${size}rem`;
+  bubble.style.left = `${Math.random() * 100}%`;
+  bubble.style.animationDuration = `${5 + Math.random() * 10}s`;
 
-  if (!found) {
-    appendMessage("Answer: माफ़ कीजिए, मैं समझ नहीं पाया।", 'bot');
-  }
-
-  userInput.value = '';
-  userInput.focus();
+  bubbleContainer.appendChild(bubble);
+  setTimeout(() => {
+    bubble.remove();
+  }, 15000);
 }
 
-// Handle Enter key
-userInput.addEventListener('keypress', function(e) {
-  if (e.key === 'Enter') {
-    sendMessage();
-  }
-});
+setInterval(createBubble, 1000);
